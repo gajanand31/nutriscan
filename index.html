@@ -561,11 +561,21 @@ function showPage(p){
 
 // ── Totals ───────────────────────────────────────────────────────────────────
 function getTotals(){
-  return getTodayMeals().reduce((a,m)=>({
-    cal:a.cal+(m.calories||0),fat:a.fat+(m.fat||0),carb:a.carb+(m.carbs||0),
-    protein:a.protein+(m.protein||0),fiber:a.fiber+(m.fiber||0),satFat:a.satFat+(m.saturated_fat||0),
-    vitd:a.vitd+(m.vitamin_d||0),b12:a.b12+(m.vitamin_b12||0),iron:a.iron+(m.iron||0),omega3:a.omega3+(m.omega3||0)
-  },{cal:0,fat:0,carb:0,protein:0,fiber:0,satFat:0,vitd:0,b12:0,iron:0,omega3:0});
+  var init={cal:0,fat:0,carb:0,protein:0,fiber:0,satFat:0,vitd:0,b12:0,iron:0,omega3:0};
+  return getTodayMeals().reduce(function(a,m){
+    return {
+      cal: a.cal+(m.calories||0),
+      fat: a.fat+(m.fat||0),
+      carb: a.carb+(m.carbs||0),
+      protein: a.protein+(m.protein||0),
+      fiber: a.fiber+(m.fiber||0),
+      satFat: a.satFat+(m.saturated_fat||0),
+      vitd: a.vitd+(m.vitamin_d||0),
+      b12: a.b12+(m.vitamin_b12||0),
+      iron: a.iron+(m.iron||0),
+      omega3: a.omega3+(m.omega3||0)
+    };
+  }, init);
 }
 
 function updateTotals(){
