@@ -826,5 +826,138 @@ function renderTrends(){
   });
 }
 </script>
+
+<!-- ══ FIREBASE SYNC ══ -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+import { getFirestore, doc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA2ZXaOCr9_F8PmEvFqIeik75Jy6EQ0xVM",
+  authDomain: "to-do-2109a.firebaseapp.com",
+  projectId: "to-do-2109a",
+  storageBucket: "to-do-2109a.firebasestorage.app",
+  messagingSenderId: "993405863451",
+  appId: "1:993405863451:web:98ba381d992132e19f1abe"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ── Sync user ID ────────────────────────────────────────────────────────────
+// Single shared user (Gajanand) — all devices use the same doc
+const USER_ID = 'gajanand31';
+const mealsDocRef   = doc(db, 'nutriscan', USER_ID + '_meals');
+const activityDocRef = doc(db, 'nutriscan', USER_ID + '_activity');
+
+// ── Sync status badge ────────────────────────────────────────────────────────
+const syncBadge = document.createElement('div');
+syncBadge.id = 'sync-badge';
+syncBadge.style.cssText = `position:fixed;top:12px;right:16px;z-index:999;font-size:11px;font-weight:600;padding:4px 11px;border-radius:99px;background:#dcfce7;color:#16a34a;box-shadow:0 2px 8px rgba(0,0,0,.12);transition:all .3s;pointer-events:none`;
+syncBadge.textContent = '🟢 Synced';
+document.body.appendChild(syncBadge);
+
+function setSyncing() { syncBadge.style.background='#fef3c7'; syncBadge.style.color='#d97706'; syncBadge.textContent='🔄 Syncing…'; }
+function setSynced()  { syncBadge.style.background='#dcfce7'; syncBadge.style.color='#16a34a'; syncBadge.textContent='🟢 Synced'; }
+function setOffline() { syncBadge.style.background='#fee2e2'; syncBadge.style.color='#ef4444'; syncBadge.textContent='🔴 Offline'; }
+window.addEventListener('online', setSynced);
+window.addEventListener('offline', setOffline);
+
+let isSyncingFromCloud = false;
+
+// ── Listen for remote changes → update local state ──────────────────────────
+onSnapshot(mealsDocRef, snap => {
+  if (!snap.exists()) return;
+  const remote = snap.data();
+  if (!remote.meals) return;
+  isSyncingFromCloud = true;
+  // Update the global meals array used by the app
+  if (typeof meals !== 'undefined') {
+    meals.length = 0;
+    remote.meals.forEach(m => meals.push(m));
+    localStorage.setItem('ns_meals', JSON.stringify(meals));
+    if (typeof renderMeals === 'function') renderMeals();
+    if (typeof updateTotals === 'function') updateTotals();
+    if (typeof renderNudges === 'function') renderNudges();
+  }
+  setSynced();
+  isSyncingFromCloud = false;
+}, () => setOffline());
+
+onSnapshot(activityDocRef, snap => {
+  if (!snap.exists()) return;
+  const remote = snap.data();
+  if (!remote.activity) return;
+  isSyncingFromCloud = true;
+  if (typeof activity !== 'undefined') {
+    Object.keys(activity).forEach(k => delete activity[k]);
+    Object.assign(activity, remote.activity);
+    localStorage.setItem('ns_activity', JSON.stringify(activity));
+    if (typeof loadActivity === 'function') loadActivity();
+    if (typeof renderNudges === 'function') renderNudges();
+  }
+  setSynced();
+  isSyncingFromCloud = false;
+}, () => setOffline());
+
+// ── Push local changes → Firestore ──────────────────────────────────────────
+async function pushMeals() {
+  if (isSyncingFromCloud) return;
+  if (typeof meals === 'undefined') return;
+  setSyncing();
+  try {
+    await setDoc(mealsDocRef, { meals: meals, updatedAt: Date.now() });
+    setSynced();
+  } catch(e) { setOffline(); }
+}
+
+async function pushActivity() {
+  if (isSyncingFromCloud) return;
+  if (typeof activity === 'undefined') return;
+  setSyncing();
+  try {
+    await setDoc(activityDocRef, { activity: activity, updatedAt: Date.now() });
+    setSynced();
+  } catch(e) { setOffline(); }
+}
+
+// ── Intercept localStorage writes to auto-push ───────────────────────────────
+const _origSetItem = localStorage.setItem.bind(localStorage);
+localStorage.setItem = function(key, value) {
+  _origSetItem(key, value);
+  if (key === 'ns_meals')    pushMeals();
+  if (key === 'ns_activity') pushActivity();
+};
+
+// ── Initial load from Firestore (if local is empty) ──────────────────────────
+async function initialLoad() {
+  try {
+    const mealsSnap = await getDoc(mealsDocRef);
+    if (mealsSnap.exists() && typeof meals !== 'undefined') {
+      const remote = mealsSnap.data();
+      if (remote.meals && remote.meals.length > 0 && meals.length === 0) {
+        meals.length = 0;
+        remote.meals.forEach(m => meals.push(m));
+        localStorage.setItem('ns_meals', JSON.stringify(meals));
+        if (typeof renderMeals === 'function') renderMeals();
+        if (typeof updateTotals === 'function') updateTotals();
+      }
+    }
+    const actSnap = await getDoc(activityDocRef);
+    if (actSnap.exists() && typeof activity !== 'undefined') {
+      const remote = actSnap.data();
+      if (remote.activity) {
+        Object.assign(activity, remote.activity);
+        localStorage.setItem('ns_activity', JSON.stringify(activity));
+        if (typeof loadActivity === 'function') loadActivity();
+      }
+    }
+  } catch(e) { setOffline(); }
+}
+
+// Run initial load after the main app script has initialised
+setTimeout(initialLoad, 800);
+</script>
+
 </body>
 </html>
